@@ -1,0 +1,24 @@
+export class EscalationRepository {
+  constructor(databaseManager) {
+    this.database = databaseManager;
+  }
+
+  recordEscalation({ sessionId, type, reason }) {
+    this.database.execute(
+      `INSERT INTO escalations (session_id, type, reason, email_sent_at)
+       VALUES (@session_id, @type, @reason, @email_sent_at)`,
+      {
+        session_id: sessionId,
+        type,
+        reason,
+        email_sent_at: new Date().toISOString()
+      }
+    );
+  }
+
+  listEscalations() {
+    return this.database.query(
+      'SELECT * FROM escalations ORDER BY email_sent_at DESC'
+    );
+  }
+}

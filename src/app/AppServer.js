@@ -6,6 +6,7 @@ import path from 'path';
 import { SessionRepository } from '../repositories/SessionRepository.js';
 import { MessageRepository } from '../repositories/MessageRepository.js';
 import { EscalationRepository } from '../repositories/EscalationRepository.js';
+import { EscalationContactRepository } from '../repositories/EscalationContactRepository.js';
 import { DocsCacheRepository } from '../repositories/DocsCacheRepository.js';
 import { SettingsRepository } from '../repositories/SettingsRepository.js';
 import { DocumentManager } from '../services/DocumentManager.js';
@@ -15,12 +16,13 @@ import { ChatCoordinator } from '../services/ChatCoordinator.js';
 import { ChatHistoryService } from '../services/ChatHistoryService.js';
 import { ConversationDeletionService } from '../services/ConversationDeletionService.js';
 import { LlmModelProvider } from '../services/llm/LlmModelProvider.js';
-import { EscalationDecisionManager } from '../services/escalation/EscalationDecisionManager.js';
-import { EscalationPromptEvaluator } from '../services/escalation/EscalationPromptEvaluator.js';
 import { LanguageDetectionService } from '../services/language/LanguageDetectionService.js';
 import { AdminDashboardPreferences } from '../services/admin/AdminDashboardPreferences.js';
 import { LlmSystemPromptProvider } from '../services/llm/LlmSystemPromptProvider.js';
 import { LlmPromptSettingsResolver } from '../services/llm/LlmPromptSettingsResolver.js';
+import { LlmTranslationService } from '../services/llm/LlmTranslationService.js';
+import { EscalationLocalizationService } from '../services/escalation/EscalationLocalizationService.js';
+import { EscalationContactManager } from '../services/escalation/EscalationContactManager.js';
 import { SessionMiddleware } from '../middleware/SessionMiddleware.js';
 import { AdminAuthMiddleware } from '../middleware/AdminAuthMiddleware.js';
 import { PublicRouter } from '../routes/PublicRouter.js';
@@ -34,6 +36,7 @@ export class AppServer {
     this.sessionRepository = new SessionRepository(databaseManager);
     this.messageRepository = new MessageRepository(databaseManager);
     this.escalationRepository = new EscalationRepository(databaseManager);
+    this.escalationContactRepository = new EscalationContactRepository(databaseManager);
     this.docsCacheRepository = new DocsCacheRepository(databaseManager);
     this.settingsRepository = new SettingsRepository(databaseManager);
     this.promptSettingsResolver = new LlmPromptSettingsResolver({
@@ -63,11 +66,18 @@ export class AppServer {
     this.conversationDeletionService = new ConversationDeletionService({
       sessionRepository: this.sessionRepository,
       messageRepository: this.messageRepository,
-      escalationRepository: this.escalationRepository
+      escalationRepository: this.escalationRepository,
+      escalationContactRepository: this.escalationContactRepository
     });
-    this.escalationDecisionManager = new EscalationDecisionManager();
-    this.escalationPromptEvaluator = new EscalationPromptEvaluator();
     this.languageDetectionService = new LanguageDetectionService();
+    this.llmTranslationService = new LlmTranslationService({ environmentConfig });
+    this.escalationLocalizationService = new EscalationLocalizationService({
+      translationService: this.llmTranslationService
+    });
+    this.escalationContactManager = new EscalationContactManager({
+      contactRepository: this.escalationContactRepository,
+      localizationService: this.escalationLocalizationService
+    });
     this.adminDashboardPreferences = new AdminDashboardPreferences({
       settingsRepository: this.settingsRepository,
       environmentConfig: this.environmentConfig,
@@ -81,8 +91,8 @@ export class AppServer {
       documentManager: this.documentManager,
       llmChatService: this.llmChatService,
       emailNotificationService: this.emailNotificationService,
-      escalationDecisionManager: this.escalationDecisionManager,
-      escalationPromptEvaluator: this.escalationPromptEvaluator,
+      escalationLocalizationService: this.escalationLocalizationService,
+      escalationContactManager: this.escalationContactManager,
       languageDetectionService: this.languageDetectionService
     });
 

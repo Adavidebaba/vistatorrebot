@@ -41,7 +41,7 @@ class EscalationPromptController {
     if (preferred) {
       return preferred;
     }
-    return 'Avvisa il gestore / Notify the manager';
+    return 'Notify the manager';
   }
 
   buildConfirmationMessage(messages = {}) {
@@ -49,7 +49,7 @@ class EscalationPromptController {
     if (preferred) {
       return preferred;
     }
-    return 'Sì, per favore avvisa il gestore per me. / Yes, please notify the manager for me.';
+    return 'Yes, please notify the manager for me.';
   }
 
   pickPrimary(values = {}) {
@@ -216,6 +216,16 @@ escalationPromptController = new EscalationPromptController({
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   await submitMessage({ message: input.value, clearInput: true });
+});
+
+input.addEventListener('keydown', async (event) => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    if (input.disabled) {
+      return;
+    }
+    await submitMessage({ message: input.value, clearInput: true });
+  }
 });
 
 loadHistory();

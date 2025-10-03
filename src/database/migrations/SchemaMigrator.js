@@ -7,6 +7,7 @@ export class SchemaMigrator {
     this.createSessionsTable();
     this.createMessagesTable();
     this.createEscalationsTable();
+    this.createEscalationContactsTable();
     this.createDocsCacheTable();
     this.createDocChunksTable();
     this.createSettingsTable();
@@ -47,6 +48,20 @@ export class SchemaMigrator {
         type TEXT CHECK(type IN ('missing_info','urgent')),
         reason TEXT,
         email_sent_at TEXT
+      )
+    `;
+    this.database.execute(sql);
+  }
+
+  createEscalationContactsTable() {
+    const sql = `
+      CREATE TABLE IF NOT EXISTS escalation_contacts (
+        session_id TEXT PRIMARY KEY,
+        status TEXT CHECK(status IN ('pending','ready')),
+        reason TEXT,
+        contact_info TEXT,
+        created_at TEXT,
+        updated_at TEXT
       )
     `;
     this.database.execute(sql);

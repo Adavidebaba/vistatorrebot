@@ -43,18 +43,33 @@ export class EnvironmentConfig {
     return this.env.LLM_MODEL_PRIMARY || this.env.LLM_MODEL || '';
   }
 
+  get primaryProvider() {
+    return (this.env.LLM_PROVIDER_PRIMARY || this.env.LLM_PROVIDER || 'openai').toLowerCase();
+  }
+
   get fallbackModel() {
     return this.env.LLM_MODEL_FALLBACK || '';
   }
 
-  get availableModels() {
-    const models = [this.primaryModel, this.fallbackModel]
-      .filter((model) => Boolean(model))
-      .filter((model, index, array) => array.indexOf(model) === index);
-    if (models.length === 0 && this.llmModel) {
-      return [this.llmModel];
+  get fallbackProvider() {
+    return (this.env.LLM_PROVIDER_FALLBACK || 'openai').toLowerCase();
+  }
+
+  get modelConfigurations() {
+    const entries = [];
+    if (this.primaryModel) {
+      entries.push({ provider: this.primaryProvider, model: this.primaryModel });
     }
-    return models;
+    if (this.fallbackModel) {
+      const fallbackEntry = { provider: this.fallbackProvider, model: this.fallbackModel };
+      if (!entries.some((item) => item.provider === fallbackEntry.provider && item.model === fallbackEntry.model)) {
+        entries.push(fallbackEntry);
+      }
+    }
+    if (entries.length === 0 && this.llmModel) {
+      entries.push({ provider: 'openai', model: this.llmModel });
+    }
+    return entries;
   }
 
   get embeddingsModel() {
@@ -112,5 +127,13 @@ export class EnvironmentConfig {
       return undefined;
     }
     return Math.floor(raw);
+  }
+
+  get xaiApiKey() {
+    return this.env.XAI_API_KEY || '';
+  }
+
+  get xaiBaseUrl() {
+    return this.env.XAI_BASE_URL || 'https://api.x.ai/v1';
   }
 }

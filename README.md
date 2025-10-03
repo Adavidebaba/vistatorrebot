@@ -13,8 +13,15 @@ Questo progetto fornisce un MVP per un assistente virtuale dedicato a una strutt
 ```bash
 npm install
 cp .env.example .env
-# aggiornare lo `.env` con le credenziali reali
+# aggiornare lo `.env` con le credenziali reali (OpenAI e, se usato, xAI)
 ```
+
+Variabili principali legate ai modelli LLM:
+
+- `LLM_MODEL_PRIMARY` / `LLM_PROVIDER_PRIMARY`: modello e provider predefiniti (`openai` o `xai`).
+- `LLM_MODEL_FALLBACK` / `LLM_PROVIDER_FALLBACK`: coppia alternativa usata in fallback automatico.
+- `LLM_API_KEY`: chiave OpenAI.
+- `XAI_API_KEY`: chiave xAI (richiesta solo se selezioni un modello Grok).
 
 ## Avvio
 
@@ -32,6 +39,7 @@ L'applicazione espone la chat su `http://localhost:3000/` e l'area amministrativ
 - Registrazione messaggi e escalation con email via Nodemailer
 - Recupero conoscenza da Google Docs con caching e chunking dinamico
 - Ricerca semantica tramite embeddings e chiamata all'LLM con prompt JSON-only
+- Selezione runtime del modello LLM (OpenAI o xAI) con fallback configurabile dal pannello admin
 - Dashboard amministrativa con filtro temporale, dettaglio conversazioni, refresh documento e export CSV
 
 ## Testing manuale suggerito

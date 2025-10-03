@@ -6,50 +6,98 @@ export class LlmModelProvider {
   }
 
   getModelCandidates() {
-    const primary = this.getActiveModel();
-    const fallback = this.environmentConfig.fallbackModel;
-    const candidates = [primary];
-    if (fallback && fallback !== primary) {
-      candidates.push(fallback);
+    const active = this.getActiveModel();
+    const candidates = [];
+
+    if (active) {
+      candidates.push(active);
     }
+
+    for (const combo of this.environmentConfig.modelConfigurations) {
+      if (!combo) {
+        continue;
+      }
+      if (active && combo.provider === active.provider && combo.model === active.model) {
+        continue;
+      }
+      candidates.push({ provider: combo.provider, model: combo.model });
+    }
+
     return candidates;
   }
 
   getActiveModel() {
     const stored = this.settingsRepository.getValue(this.settingKey);
-    if (stored && this.isAllowed(stored)) {
-      return stored;
+    const parsed = this.parseSelection(stored);
+    if (parsed && this.isAllowedCombination(parsed)) {
+      return parsed;
     }
 
-    const defaultModel = this.environmentConfig.primaryModel || this.environmentConfig.llmModel;
-    const model = defaultModel || this.environmentConfig.availableModels[0];
-    if (model) {
-      this.setActiveModel(model);
-      return model;
+    const [first] = this.getAvailableModels();
+    if (first) {
+      this.setActiveModel(first);
+      return first;
     }
+
+    const fallback = this.environmentConfig.llmModel;
+    if (fallback) {
+      return { provider: 'openai', model: fallback };
+    }
+
     throw new Error('No LLM model configured.');
   }
 
-  setActiveModel(modelName) {
-    if (!this.isAllowed(modelName)) {
-      throw new Error(`Model ${modelName} is not allowed.`);
+  setActiveModel(selection) {
+    const parsed =
+      typeof selection === 'string' ? this.parseSelection(selection) : selection;
+    if (!parsed || !this.isAllowedCombination(parsed)) {
+      throw new Error('Model selection is not allowed.');
     }
-    this.settingsRepository.setValue(this.settingKey, modelName);
-    return modelName;
+    this.settingsRepository.setValue(this.settingKey, this.buildSelectionValue(parsed));
+    return parsed;
   }
 
   getAvailableModels() {
-    const configured = this.environmentConfig.availableModels;
-    if (configured.length > 0) {
-      return configured;
-    }
-    if (this.environmentConfig.llmModel) {
-      return [this.environmentConfig.llmModel];
-    }
-    return [];
+    return this.environmentConfig.modelConfigurations.map((item) => ({
+      provider: item.provider,
+      model: item.model,
+      label: this.buildLabel(item)
+    }));
   }
 
-  isAllowed(modelName) {
-    return this.getAvailableModels().includes(modelName);
+  isAllowedCombination(selection) {
+    return this.environmentConfig.modelConfigurations.some(
+      (item) => item.provider === selection.provider && item.model === selection.model
+    );
+  }
+
+  parseSelection(value) {
+    if (!value) {
+      return null;
+    }
+    if (typeof value === 'object' && value.provider && value.model) {
+      return { provider: value.provider, model: value.model };
+    }
+    const stringValue = String(value);
+    if (!stringValue) {
+      return null;
+    }
+    if (stringValue.includes(':')) {
+      const [provider, ...modelParts] = stringValue.split(':');
+      const model = modelParts.join(':');
+      if (provider && model) {
+        return { provider, model };
+      }
+    }
+    return { provider: 'openai', model: stringValue };
+  }
+
+  buildSelectionValue({ provider, model }) {
+    return `${provider}:${model}`;
+  }
+
+  buildLabel({ provider, model }) {
+    const providerName = provider === 'xai' ? 'xAI' : 'OpenAI';
+    return `${providerName} · ${model}`;
   }
 }

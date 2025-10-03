@@ -152,10 +152,13 @@ export class AdminRouter {
     }
     const available = this.modelProvider.getAvailableModels();
     const active = this.modelProvider.getActiveModel();
+    const activeValue = this.modelProvider.buildSelectionValue(active);
     return available.map((model) => ({
-      value: model,
-      label: model,
-      selected: model === active
+      value: this.modelProvider.buildSelectionValue(model),
+      label: model.label || this.modelProvider.buildSelectionValue(model),
+      selected:
+        this.modelProvider.buildSelectionValue({ provider: model.provider, model: model.model }) ===
+        activeValue
     }));
   }
 }

@@ -22,4 +22,14 @@ export class SettingsRepository {
       }
     );
   }
+
+  getSetting(key) {
+    return this.database.queryOne('SELECT key, value FROM settings WHERE key = @key', {
+      key
+    });
+  }
+
+  saveSetting(key, value) {
+    this.setValue(key, value);
+  }
 }

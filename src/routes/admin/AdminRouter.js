@@ -12,6 +12,7 @@ export class AdminRouter {
     adminAuthMiddleware,
     conversationDeletionService,
     modelProvider,
+    dashboardPreferences,
     pageRenderer = new AdminPageRenderer(),
     conversationExporter = new AdminConversationExporter()
   }) {
@@ -23,6 +24,7 @@ export class AdminRouter {
     this.conversationExporter = conversationExporter;
     this.conversationDeletionService = conversationDeletionService;
     this.modelProvider = modelProvider;
+    this.dashboardPreferences = dashboardPreferences;
 
     this.router = express.Router();
     this.registerPublicRoutes();
@@ -55,23 +57,27 @@ export class AdminRouter {
   }
 
   registerProtectedRoutes() {
-    this.router.use(this.adminAuthMiddleware.ensureAuthenticated);
+    const ensureAuthenticated = this.adminAuthMiddleware.ensureAuthenticated;
 
-    this.router.get('/admin', (req, res) => {
+    this.router.get('/admin', ensureAuthenticated, (req, res) => {
       const selectedDays = this.resolveDaysFilter(req.query.days);
       const sessions = this.sessionRepository.listSessions({ days: selectedDays });
       const feedbackMessage = this.resolveFeedbackMessage(req.query);
       const modelOptions = this.buildModelOptions();
+      const documentationUrl = this.dashboardPreferences?.getDocumentationUrl() || '';
+      const systemPrompt = this.dashboardPreferences?.getSystemPrompt() || '';
       const viewModel = new AdminDashboardViewModel({
         sessions,
         selectedDays,
         feedbackMessage,
-        modelOptions
+        modelOptions,
+        documentationUrl,
+        systemPrompt
       });
       res.send(this.pageRenderer.renderDashboard(viewModel));
     });
 
-    this.router.get('/admin/session/:id', (req, res) => {
+    this.router.get('/admin/session/:id', ensureAuthenticated, (req, res) => {
       const detail = this.sessionRepository.getSessionWithMessages(req.params.id);
       if (!detail) {
         return res.status(404).send('Sessione non trovata');
@@ -80,7 +86,7 @@ export class AdminRouter {
       return res.send(this.pageRenderer.renderSessionDetail(viewModel));
     });
 
-    this.router.post('/admin/refresh-doc', async (req, res) => {
+    this.router.post('/admin/refresh-doc', ensureAuthenticated, async (req, res) => {
       try {
         await this.documentManager.refreshDocument();
         res.redirect('/admin?refreshed=1');
@@ -89,7 +95,7 @@ export class AdminRouter {
       }
     });
 
-    this.router.get('/admin/export.csv', (req, res) => {
+    this.router.get('/admin/export.csv', ensureAuthenticated, (req, res) => {
       const messages = this.messageRepository.listAllMessages();
       const csv = this.conversationExporter.buildCsv(messages);
       res.header('Content-Type', 'text/csv');
@@ -97,7 +103,7 @@ export class AdminRouter {
       res.send(csv);
     });
 
-    this.router.post('/admin/session/:id/delete', (req, res) => {
+    this.router.post('/admin/session/:id/delete', ensureAuthenticated, (req, res) => {
       const sessionId = req.params.id;
       const success = this.conversationDeletionService.deleteSession(sessionId);
       res.redirect(`/admin?deleted=${success ? 1 : 0}`);
@@ -106,6 +112,7 @@ export class AdminRouter {
     this.router.post(
       '/admin/model',
       express.urlencoded({ extended: false }),
+      ensureAuthenticated,
       (req, res) => {
         if (!this.modelProvider) {
           return res.redirect('/admin?model=error');
@@ -117,6 +124,21 @@ export class AdminRouter {
         } catch (error) {
           res.redirect('/admin?model=error');
         }
+      }
+    );
+
+    this.router.post(
+      '/admin/preferences',
+      ensureAuthenticated,
+      express.urlencoded({ extended: false }),
+      (req, res) => {
+        const documentationUrl = req.body.documentation_url || '';
+        const systemPrompt = req.body.system_prompt || '';
+        if (this.dashboardPreferences) {
+          this.dashboardPreferences.updateDocumentationUrl(documentationUrl);
+          this.dashboardPreferences.updateSystemPrompt(systemPrompt);
+        }
+        res.redirect('/admin?preferences=updated');
       }
     );
   }
@@ -142,6 +164,9 @@ export class AdminRouter {
     }
     if (query?.model === 'error') {
       return 'Impossibile aggiornare il modello LLM';
+    }
+    if (query?.preferences === 'updated') {
+      return 'Preferenze aggiornate con successo';
     }
     return null;
   }

@@ -1,10 +1,16 @@
 export class LlmSystemPromptProvider {
-  constructor({ environmentConfig, fallbackPrompt = '' } = {}) {
+  constructor({ environmentConfig, fallbackPrompt = '', promptSettingsResolver = null } = {}) {
     this.environmentConfig = environmentConfig;
     this.fallbackPrompt = fallbackPrompt;
+    this.promptSettingsResolver = promptSettingsResolver;
   }
 
   getPrompt() {
+    const overridePrompt = this.getOverridePrompt();
+    if (overridePrompt) {
+      return overridePrompt;
+    }
+
     const rawPrompt = this.environmentConfig?.llmSystemPrompt;
     const normalizedPrompt = this.normalize(rawPrompt);
     if (normalizedPrompt) {
@@ -30,5 +36,13 @@ export class LlmSystemPromptProvider {
       return '';
     }
     return trimmed.replace(/\\n/g, '\n');
+  }
+
+  getOverridePrompt() {
+    if (!this.promptSettingsResolver) {
+      return '';
+    }
+    const prompt = this.promptSettingsResolver.getSystemPromptOverride();
+    return this.normalize(prompt);
   }
 }

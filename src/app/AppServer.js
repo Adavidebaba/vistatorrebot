@@ -15,6 +15,12 @@ import { ChatCoordinator } from '../services/ChatCoordinator.js';
 import { ChatHistoryService } from '../services/ChatHistoryService.js';
 import { ConversationDeletionService } from '../services/ConversationDeletionService.js';
 import { LlmModelProvider } from '../services/llm/LlmModelProvider.js';
+import { EscalationDecisionManager } from '../services/escalation/EscalationDecisionManager.js';
+import { EscalationPromptEvaluator } from '../services/escalation/EscalationPromptEvaluator.js';
+import { LanguageDetectionService } from '../services/language/LanguageDetectionService.js';
+import { AdminDashboardPreferences } from '../services/admin/AdminDashboardPreferences.js';
+import { LlmSystemPromptProvider } from '../services/llm/LlmSystemPromptProvider.js';
+import { LlmPromptSettingsResolver } from '../services/llm/LlmPromptSettingsResolver.js';
 import { SessionMiddleware } from '../middleware/SessionMiddleware.js';
 import { AdminAuthMiddleware } from '../middleware/AdminAuthMiddleware.js';
 import { PublicRouter } from '../routes/PublicRouter.js';
@@ -30,6 +36,9 @@ export class AppServer {
     this.escalationRepository = new EscalationRepository(databaseManager);
     this.docsCacheRepository = new DocsCacheRepository(databaseManager);
     this.settingsRepository = new SettingsRepository(databaseManager);
+    this.promptSettingsResolver = new LlmPromptSettingsResolver({
+      settingsRepository: this.settingsRepository
+    });
     this.llmModelProvider = new LlmModelProvider({
       environmentConfig: this.environmentConfig,
       settingsRepository: this.settingsRepository
@@ -38,9 +47,14 @@ export class AppServer {
       docsCacheRepository: this.docsCacheRepository,
       environmentConfig: this.environmentConfig
     });
+    this.llmSystemPromptProvider = new LlmSystemPromptProvider({
+      environmentConfig,
+      promptSettingsResolver: this.promptSettingsResolver
+    });
     this.llmChatService = new LlmChatService({
       environmentConfig,
-      modelProvider: this.llmModelProvider
+      modelProvider: this.llmModelProvider,
+      systemPromptProvider: this.llmSystemPromptProvider
     });
     this.emailNotificationService = new EmailNotificationService({ environmentConfig });
     this.chatHistoryService = new ChatHistoryService({
@@ -51,13 +65,25 @@ export class AppServer {
       messageRepository: this.messageRepository,
       escalationRepository: this.escalationRepository
     });
+    this.escalationDecisionManager = new EscalationDecisionManager();
+    this.escalationPromptEvaluator = new EscalationPromptEvaluator();
+    this.languageDetectionService = new LanguageDetectionService();
+    this.adminDashboardPreferences = new AdminDashboardPreferences({
+      settingsRepository: this.settingsRepository,
+      environmentConfig: this.environmentConfig,
+      systemPromptProvider: this.llmSystemPromptProvider,
+      promptSettingsResolver: this.promptSettingsResolver
+    });
     this.chatCoordinator = new ChatCoordinator({
       sessionRepository: this.sessionRepository,
       messageRepository: this.messageRepository,
       escalationRepository: this.escalationRepository,
       documentManager: this.documentManager,
       llmChatService: this.llmChatService,
-      emailNotificationService: this.emailNotificationService
+      emailNotificationService: this.emailNotificationService,
+      escalationDecisionManager: this.escalationDecisionManager,
+      escalationPromptEvaluator: this.escalationPromptEvaluator,
+      languageDetectionService: this.languageDetectionService
     });
 
     this.sessionMiddleware = new SessionMiddleware({ sessionRepository: this.sessionRepository });
@@ -73,7 +99,8 @@ export class AppServer {
       documentManager: this.documentManager,
       adminAuthMiddleware: this.adminAuthMiddleware,
       conversationDeletionService: this.conversationDeletionService,
-      modelProvider: this.llmModelProvider
+      modelProvider: this.llmModelProvider,
+      dashboardPreferences: this.adminDashboardPreferences
     });
 
     this.app = express();

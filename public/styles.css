@@ -64,6 +64,32 @@ header h1 {
   font-size: 12px;
 }
 
+.escalation-actions {
+  margin-top: 10px;
+  display: flex;
+}
+
+.escalation-button {
+  background: #e67e22;
+  border: none;
+  color: #ffffff;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.2s ease-in-out;
+}
+
+.escalation-button:hover:not(:disabled) {
+  background: #cf711c;
+}
+
+.escalation-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .chat-form {
   display: flex;
   flex-direction: column;

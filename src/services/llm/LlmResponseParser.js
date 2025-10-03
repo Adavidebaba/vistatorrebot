@@ -24,14 +24,22 @@ export class LlmResponseParser {
   }
 
   withDefaultFields(payload) {
+    const needsEscalation = Boolean(payload.needs_escalation);
     const snippets = this.normalizeSnippets(payload.snippets_used);
+    const showEscalationPrompt = this.normalizeBoolean(payload.show_escalation_prompt);
+    const metadata = this.normalizeMetadata(payload.metadata);
 
     return {
       answer: payload.answer ?? '',
       confidence: this.normalizeConfidence(payload.confidence),
-      needs_escalation: Boolean(payload.needs_escalation),
-      escalation_reason: this.normalizeEscalationReason(payload.escalation_reason),
-      snippets_used: snippets
+      needs_escalation: needsEscalation,
+      escalation_reason: this.normalizeEscalationReason({
+        rawReason: payload.escalation_reason,
+        needsEscalation
+      }),
+      snippets_used: snippets,
+      show_escalation_prompt: showEscalationPrompt,
+      metadata
     };
   }
 
@@ -52,12 +60,39 @@ export class LlmResponseParser {
     return 0;
   }
 
-  normalizeEscalationReason(reason) {
+  normalizeEscalationReason({ rawReason, needsEscalation }) {
     const allowedReasons = new Set(['missing_info', 'urgent', 'none']);
-    if (allowedReasons.has(reason)) {
-      return reason;
+    if (typeof rawReason === 'string') {
+      const normalized = rawReason.trim().toLowerCase();
+      if (allowedReasons.has(normalized)) {
+        return normalized;
+      }
+
+      if (normalized.length > 0) {
+        return needsEscalation ? 'missing_info' : 'none';
+      }
     }
 
-    return 'none';
+    return needsEscalation ? 'missing_info' : 'none';
+  }
+
+  normalizeBoolean(value) {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (value === 'true') {
+      return true;
+    }
+    if (value === 'false') {
+      return false;
+    }
+    return false;
+  }
+
+  normalizeMetadata(metadata) {
+    if (metadata && typeof metadata === 'object') {
+      return metadata;
+    }
+    return {};
   }
 }

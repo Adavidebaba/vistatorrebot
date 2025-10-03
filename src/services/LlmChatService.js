@@ -34,10 +34,10 @@ export class LlmChatService {
     };
   }
 
-  async generateResponse({ userMessage, contextFragments = [] }) {
+  async generateResponse({ conversationMessages = [], contextFragments = [] }) {
     const inputMessages = this.promptComposer.composeMessages({
       contextFragments,
-      userMessage
+      conversationMessages
     });
 
     const reasoningOptions = this.buildReasoningOptions();

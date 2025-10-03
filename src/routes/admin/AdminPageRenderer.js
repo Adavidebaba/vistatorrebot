@@ -73,6 +73,10 @@ export class AdminPageRenderer {
       ? `<div class="alert">${this.escapeHtml(viewModel.feedbackMessage)}</div>`
       : '';
 
+    const documentationLink = viewModel.documentationUrl
+      ? `<a class="doc-link" href="${this.escapeHtml(viewModel.documentationUrl)}" target="_blank" rel="noreferrer noopener">Apri documentazione</a>`
+      : '<span class="doc-link disabled">Documentazione non configurata</span>';
+
     return `<!DOCTYPE html>
 <html lang="it">
 <head>
@@ -91,6 +95,15 @@ export class AdminPageRenderer {
     td form { margin: 0; }
     td form button { background: #d9534f; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
     td form button:hover { opacity: 0.9; }
+    .preferences { margin-top: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9; }
+    .preferences h2 { margin-top: 0; }
+    .preferences form { display: flex; flex-direction: column; gap: 12px; }
+    .preferences label { font-weight: bold; }
+    .preferences input[type="url"], .preferences textarea { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-family: inherit; }
+    .preferences textarea { min-height: 160px; }
+    .preferences button { align-self: flex-start; padding: 8px 16px; border-radius: 6px; border: none; background: #2f5bea; color: #fff; cursor: pointer; }
+    .preferences button:hover { opacity: 0.92; }
+    .doc-link.disabled { color: #999; }
   </style>
 </head>
 <body>
@@ -113,8 +126,23 @@ export class AdminPageRenderer {
     </form>
     <a href="/admin/export.csv">Esporta CSV</a>
     ${modelSelect}
+    ${documentationLink}
   </section>
   ${feedback}
+  <section class="preferences">
+    <h2>Preferenze</h2>
+    <form method="post" action="/admin/preferences">
+      <div>
+        <label for="documentation_url">Link documentazione</label>
+        <input type="url" id="documentation_url" name="documentation_url" value="${this.escapeHtml(viewModel.documentationUrl || '')}" placeholder="https://..." />
+      </div>
+      <div>
+        <label for="system_prompt">Prompt di sistema LLM</label>
+        <textarea id="system_prompt" name="system_prompt" placeholder="Inserisci il prompt da utilizzare per il modello">${this.escapeHtml(viewModel.systemPrompt || '')}</textarea>
+      </div>
+      <button type="submit">Salva preferenze</button>
+    </form>
+  </section>
   <table>
     <thead>
       <tr>

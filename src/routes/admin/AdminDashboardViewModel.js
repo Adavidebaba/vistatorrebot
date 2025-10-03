@@ -1,9 +1,18 @@
 export class AdminDashboardViewModel {
-  constructor({ sessions, selectedDays, feedbackMessage = null, modelOptions = [] }) {
+  constructor({
+    sessions,
+    selectedDays,
+    feedbackMessage = null,
+    modelOptions = [],
+    documentationUrl = '',
+    systemPrompt = ''
+  }) {
     this.sessions = sessions;
     this.selectedDays = selectedDays;
     this.feedbackMessage = feedbackMessage;
     this.modelOptions = modelOptions;
+    this.documentationUrl = documentationUrl;
+    this.systemPrompt = systemPrompt;
   }
 
   get hasSessions() {

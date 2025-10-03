@@ -4,14 +4,45 @@ export class LlmPromptComposer {
     this.contextLabel = contextLabel;
   }
 
-  composeMessages({ contextFragments, userMessage }) {
+  composeMessages({ contextFragments, conversationMessages = [] }) {
     const contextContent = this.buildContextBlock(contextFragments);
+    const conversation = this.buildConversation(conversationMessages);
 
     return [
       { role: 'system', content: this.systemPrompt },
       { role: 'assistant', content: `${this.contextLabel}\n${contextContent}` },
-      { role: 'user', content: userMessage }
+      ...conversation
     ];
+  }
+
+  buildConversation(conversationMessages = []) {
+    if (!Array.isArray(conversationMessages) || conversationMessages.length === 0) {
+      return [];
+    }
+
+    return conversationMessages
+      .map(({ role, content }) => {
+        const normalizedRole = this.normalizeRole(role);
+        const normalizedContent = typeof content === 'string' ? content.trim() : '';
+
+        if (!normalizedRole || !normalizedContent) {
+          return null;
+        }
+
+        return { role: normalizedRole, content: normalizedContent };
+      })
+      .filter(Boolean);
+  }
+
+  normalizeRole(role) {
+    if (typeof role !== 'string') {
+      return null;
+    }
+    const normalized = role.trim().toLowerCase();
+    if (normalized === 'user' || normalized === 'assistant' || normalized === 'system') {
+      return normalized;
+    }
+    return null;
   }
 
   buildContextBlock(contextFragments = []) {

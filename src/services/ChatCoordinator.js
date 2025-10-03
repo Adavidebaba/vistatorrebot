@@ -1,4 +1,5 @@
-import { franc } from 'franc-min';
+import { EscalationDecisionManager } from './escalation/EscalationDecisionManager.js';
+import { EscalationPromptEvaluator } from './escalation/EscalationPromptEvaluator.js';
 
 export class ChatCoordinator {
   constructor({
@@ -7,7 +8,10 @@ export class ChatCoordinator {
     escalationRepository,
     documentManager,
     llmChatService,
-    emailNotificationService
+    emailNotificationService,
+    escalationDecisionManager,
+    escalationPromptEvaluator,
+    languageDetectionService
   }) {
     this.sessionRepository = sessionRepository;
     this.messageRepository = messageRepository;
@@ -15,6 +19,11 @@ export class ChatCoordinator {
     this.documentManager = documentManager;
     this.llmChatService = llmChatService;
     this.emailNotificationService = emailNotificationService;
+    this.escalationDecisionManager =
+      escalationDecisionManager || new EscalationDecisionManager();
+    this.escalationPromptEvaluator =
+      escalationPromptEvaluator || new EscalationPromptEvaluator();
+    this.languageDetectionService = languageDetectionService;
   }
 
   async handleMessage({ sessionId, userMessage }) {
@@ -30,11 +39,12 @@ export class ChatCoordinator {
 
     await this.documentManager.ensureDocumentLoaded();
     const contextFragments = await this.documentManager.getRelevantChunks(userMessage);
+    const conversationMessages = this.getConversationMessages(session.id);
 
     let llmResult;
     try {
       llmResult = await this.llmChatService.generateResponse({
-        userMessage,
+        conversationMessages,
         contextFragments
       });
     } catch (error) {
@@ -56,8 +66,18 @@ export class ChatCoordinator {
 
     const answer = llmResult.answer || 'Mi dispiace, si è verificato un problema nel generare la risposta.';
     const confidence = typeof llmResult.confidence === 'number' ? llmResult.confidence : null;
-    const needsEscalation = Boolean(llmResult.needs_escalation);
-    const escalationReason = llmResult.escalation_reason || 'none';
+    const escalationDecision = this.escalationDecisionManager.decide({
+      llmDecision: llmResult,
+      userMessage,
+      conversationMessages
+    });
+    const needsEscalation = escalationDecision.needsEscalation;
+    const escalationReason = escalationDecision.reason || 'none';
+    const escalationPromptState = this.escalationPromptEvaluator.buildPromptState({
+      assistantMessage: answer,
+      llmDecision: llmResult,
+      languageCode: detectedLanguage
+    });
 
     this.messageRepository.addMessage({
       sessionId: session.id,
@@ -78,8 +98,24 @@ export class ChatCoordinator {
     return {
       answer,
       escalated: needsEscalation,
-      reason: escalationReason !== 'none' ? escalationReason : undefined
+      reason: escalationReason !== 'none' ? escalationReason : undefined,
+      escalationPrompt: escalationPromptState.shouldDisplay ? escalationPromptState : undefined
     };
+  }
+
+  getConversationMessages(sessionId) {
+    return this.messageRepository.listMessagesForSession(sessionId).map(({ role, content }) => ({
+      role,
+      content
+    }));
+  }
+
+  detectLanguage(text) {
+    if (!this.languageDetectionService) {
+      return null;
+    }
+    const detection = this.languageDetectionService.detect(text);
+    return detection.isoCode;
   }
 
   async handleEscalation({ sessionId, type, reason }) {
@@ -98,19 +134,4 @@ export class ChatCoordinator {
     this.escalationRepository.recordEscalation({ sessionId, type, reason });
   }
 
-  detectLanguage(text) {
-    if (!text) {
-      return null;
-    }
-    const code = franc(text, { minLength: 3 });
-    const mapping = {
-      ita: 'it',
-      eng: 'en',
-      spa: 'es',
-      fra: 'fr',
-      deu: 'de',
-      por: 'pt'
-    };
-    return mapping[code] || null;
-  }
 }

@@ -21,4 +21,11 @@ export class EscalationRepository {
       'SELECT * FROM escalations ORDER BY email_sent_at DESC'
     );
   }
+
+  deleteBySession(sessionId) {
+    this.database.execute(
+      'DELETE FROM escalations WHERE session_id = @session_id',
+      { session_id: sessionId }
+    );
+  }
 }

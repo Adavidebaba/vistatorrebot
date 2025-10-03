@@ -13,9 +13,13 @@
         <p>Conversi con il nostro assistente virtuale.</p>
       </header>
       <section id="messages" class="messages"></section>
+      <div id="loading-indicator" class="loading-indicator" hidden>
+        <span class="spinner" aria-hidden="true"></span>
+        <span>Sto pensando…</span>
+      </div>
       <form id="chat-form" class="chat-form">
         <textarea id="message-input" placeholder="Scriva qui il suo messaggio" required></textarea>
-        <button type="submit">Invia</button>
+        <button id="send-button" type="submit">Invia</button>
       </form>
     </main>
     <script src="/static/main.js" type="module"></script>

@@ -7,16 +7,18 @@ import { SessionRepository } from '../repositories/SessionRepository.js';
 import { MessageRepository } from '../repositories/MessageRepository.js';
 import { EscalationRepository } from '../repositories/EscalationRepository.js';
 import { DocsCacheRepository } from '../repositories/DocsCacheRepository.js';
-import { DocChunksRepository } from '../repositories/DocChunksRepository.js';
-import { EmbeddingService } from '../services/EmbeddingService.js';
+import { SettingsRepository } from '../repositories/SettingsRepository.js';
 import { DocumentManager } from '../services/DocumentManager.js';
 import { LlmChatService } from '../services/LlmChatService.js';
 import { EmailNotificationService } from '../services/EmailNotificationService.js';
 import { ChatCoordinator } from '../services/ChatCoordinator.js';
+import { ChatHistoryService } from '../services/ChatHistoryService.js';
+import { ConversationDeletionService } from '../services/ConversationDeletionService.js';
+import { LlmModelProvider } from '../services/llm/LlmModelProvider.js';
 import { SessionMiddleware } from '../middleware/SessionMiddleware.js';
 import { AdminAuthMiddleware } from '../middleware/AdminAuthMiddleware.js';
 import { PublicRouter } from '../routes/PublicRouter.js';
-import { AdminRouter } from '../routes/AdminRouter.js';
+import { AdminRouter } from '../routes/admin/AdminRouter.js';
 
 export class AppServer {
   constructor({ environmentConfig, databaseManager }) {
@@ -27,17 +29,28 @@ export class AppServer {
     this.messageRepository = new MessageRepository(databaseManager);
     this.escalationRepository = new EscalationRepository(databaseManager);
     this.docsCacheRepository = new DocsCacheRepository(databaseManager);
-    this.docChunksRepository = new DocChunksRepository(databaseManager);
-
-    this.embeddingService = new EmbeddingService({ environmentConfig });
+    this.settingsRepository = new SettingsRepository(databaseManager);
+    this.llmModelProvider = new LlmModelProvider({
+      environmentConfig: this.environmentConfig,
+      settingsRepository: this.settingsRepository
+    });
     this.documentManager = new DocumentManager({
       docsCacheRepository: this.docsCacheRepository,
-      docChunksRepository: this.docChunksRepository,
-      embeddingService: this.embeddingService,
       environmentConfig: this.environmentConfig
     });
-    this.llmChatService = new LlmChatService({ environmentConfig });
+    this.llmChatService = new LlmChatService({
+      environmentConfig,
+      modelProvider: this.llmModelProvider
+    });
     this.emailNotificationService = new EmailNotificationService({ environmentConfig });
+    this.chatHistoryService = new ChatHistoryService({
+      messageRepository: this.messageRepository
+    });
+    this.conversationDeletionService = new ConversationDeletionService({
+      sessionRepository: this.sessionRepository,
+      messageRepository: this.messageRepository,
+      escalationRepository: this.escalationRepository
+    });
     this.chatCoordinator = new ChatCoordinator({
       sessionRepository: this.sessionRepository,
       messageRepository: this.messageRepository,
@@ -50,12 +63,17 @@ export class AppServer {
     this.sessionMiddleware = new SessionMiddleware({ sessionRepository: this.sessionRepository });
     this.adminAuthMiddleware = new AdminAuthMiddleware({ environmentConfig });
 
-    this.publicRouter = new PublicRouter({ chatCoordinator: this.chatCoordinator });
+    this.publicRouter = new PublicRouter({
+      chatCoordinator: this.chatCoordinator,
+      chatHistoryService: this.chatHistoryService
+    });
     this.adminRouter = new AdminRouter({
       sessionRepository: this.sessionRepository,
       messageRepository: this.messageRepository,
       documentManager: this.documentManager,
-      adminAuthMiddleware: this.adminAuthMiddleware
+      adminAuthMiddleware: this.adminAuthMiddleware,
+      conversationDeletionService: this.conversationDeletionService,
+      modelProvider: this.llmModelProvider
     });
 
     this.app = express();

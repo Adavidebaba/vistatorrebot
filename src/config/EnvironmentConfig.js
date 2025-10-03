@@ -36,7 +36,25 @@ export class EnvironmentConfig {
   }
 
   get llmModel() {
-    return this.env.LLM_MODEL || 'gpt-4o-mini';
+    return this.env.LLM_MODEL || this.primaryModel || 'gpt-4o-mini';
+  }
+
+  get primaryModel() {
+    return this.env.LLM_MODEL_PRIMARY || this.env.LLM_MODEL || '';
+  }
+
+  get fallbackModel() {
+    return this.env.LLM_MODEL_FALLBACK || '';
+  }
+
+  get availableModels() {
+    const models = [this.primaryModel, this.fallbackModel]
+      .filter((model) => Boolean(model))
+      .filter((model, index, array) => array.indexOf(model) === index);
+    if (models.length === 0 && this.llmModel) {
+      return [this.llmModel];
+    }
+    return models;
   }
 
   get embeddingsModel() {
@@ -49,5 +67,50 @@ export class EnvironmentConfig {
 
   get documentRefreshSeconds() {
     return Number(this.env.DOC_REFRESH_SEC || 600);
+  }
+
+  get llmSystemPrompt() {
+    return this.env.LLM_SYSTEM_PROMPT || '';
+  }
+
+  get llmReasoningEffort() {
+    const raw = (this.env.LLM_REASONING_EFFORT || '').trim().toLowerCase();
+    if (!raw) {
+      return undefined;
+    }
+    if (raw === 'null' || raw === 'none') {
+      return null;
+    }
+    if (raw === 'minimal') {
+      return 'low';
+    }
+    const allowed = new Set(['low', 'medium', 'high']);
+    if (allowed.has(raw)) {
+      return raw;
+    }
+    return undefined;
+  }
+
+  get llmReasoningSummary() {
+    const raw = (this.env.LLM_REASONING_SUMMARY || '').trim().toLowerCase();
+    if (!raw) {
+      return undefined;
+    }
+    if (raw === 'null' || raw === 'none') {
+      return null;
+    }
+    const allowed = new Set(['auto', 'concise', 'detailed']);
+    if (allowed.has(raw)) {
+      return raw;
+    }
+    return undefined;
+  }
+
+  get llmMaxOutputTokens() {
+    const raw = Number(this.env.LLM_MAX_OUTPUT_TOKENS);
+    if (!Number.isFinite(raw) || raw <= 0) {
+      return undefined;
+    }
+    return Math.floor(raw);
   }
 }

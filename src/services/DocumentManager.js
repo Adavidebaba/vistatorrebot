@@ -1,17 +1,10 @@
 import { DocumentChunker } from '../utils/DocumentChunker.js';
 
 export class DocumentManager {
-  constructor({
-    docsCacheRepository,
-    docChunksRepository,
-    embeddingService,
-    environmentConfig
-  }) {
+  constructor({ docsCacheRepository, environmentConfig, chunker } = {}) {
     this.docsCacheRepository = docsCacheRepository;
-    this.docChunksRepository = docChunksRepository;
-    this.embeddingService = embeddingService;
     this.environmentConfig = environmentConfig;
-    this.chunker = new DocumentChunker();
+    this.chunker = chunker || new DocumentChunker();
   }
 
   async ensureDocumentLoaded(force = false) {
@@ -33,20 +26,7 @@ export class DocumentManager {
     }
 
     const content = await response.text();
-    const chunks = this.chunker.chunk(content);
-    const enrichedChunks = [];
-
-    for (const chunk of chunks) {
-      const embedding = await this.embeddingService.createEmbedding(chunk.content);
-      enrichedChunks.push({
-        chunkId: chunk.chunkId,
-        content: chunk.content,
-        embedding
-      });
-    }
-
     this.docsCacheRepository.saveDocument(content);
-    this.docChunksRepository.replaceChunks(enrichedChunks);
 
     return content;
   }
@@ -61,30 +41,47 @@ export class DocumentManager {
   }
 
   async getRelevantChunks(message, topK = 5) {
-    const chunks = this.docChunksRepository.listChunks();
+    const documentContent = await this.ensureDocumentLoaded();
+    if (!documentContent) {
+      return [];
+    }
+
+    const chunks = this.chunker.chunk(documentContent);
     if (chunks.length === 0) {
       return [];
     }
 
-    const queryEmbedding = await this.embeddingService.createEmbedding(message);
-    const scored = chunks.map((chunk) => ({
-      chunk,
-      score: this.cosineSimilarity(queryEmbedding, chunk.embedding)
-    }));
-
-    return scored
-      .sort((a, b) => b.score - a.score)
-      .slice(0, topK)
-      .map((item) => item.chunk);
-  }
-
-  cosineSimilarity(a, b) {
-    const dot = a.reduce((sum, value, index) => sum + value * b[index], 0);
-    const normA = Math.sqrt(a.reduce((sum, value) => sum + value * value, 0));
-    const normB = Math.sqrt(b.reduce((sum, value) => sum + value * value, 0));
-    if (normA === 0 || normB === 0) {
-      return 0;
+    const normalizedMessage = (message || '').toLowerCase();
+    if (!normalizedMessage) {
+      return chunks.slice(0, topK);
     }
-    return dot / (normA * normB);
+
+    const keywords = normalizedMessage
+      .split(/\s+/)
+      .map((word) => word.trim())
+      .filter((word) => word.length >= 3);
+
+    const scoredChunks = chunks.map((chunk, index) => {
+      const chunkText = chunk.content.toLowerCase();
+      const score = keywords.reduce(
+        (total, keyword) => (chunkText.includes(keyword) ? total + 1 : total),
+        0
+      );
+      return { chunk, score, index };
+    });
+
+    const sorted = scoredChunks.sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      return a.index - b.index;
+    });
+
+    const maxScore = sorted[0]?.score || 0;
+    const selected = sorted.slice(0, topK).map((item) => item.chunk);
+    if (maxScore === 0) {
+      return chunks.slice(0, topK);
+    }
+    return selected;
   }
 }

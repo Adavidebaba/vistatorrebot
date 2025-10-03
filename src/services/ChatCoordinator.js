@@ -38,11 +38,19 @@ export class ChatCoordinator {
         contextFragments
       });
     } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('LLM response generation failed', {
+        sessionId: session.id,
+        message: error?.message,
+        status: error?.status ?? error?.code,
+        details: error?.response?.data ?? null
+      });
       llmResult = {
-        answer: 'Mi dispiace, al momento non riesco a recuperare le informazioni richieste. Se desidera, posso avvisare immediatamente il gestore: mi conferma?',
+        answer:
+          'Mi dispiace, sto avendo un problema temporaneo nel recuperare le informazioni. Posso comunque provare a rispondere o, se preferisce, posso avvisare il gestore: mi faccia sapere.',
         confidence: 0,
-        needs_escalation: true,
-        escalation_reason: 'missing_info'
+        needs_escalation: false,
+        escalation_reason: 'none'
       };
     }
 

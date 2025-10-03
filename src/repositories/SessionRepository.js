@@ -76,4 +76,10 @@ export class SessionRepository {
     );
     return { session, messages };
   }
+
+  deleteSession(sessionId) {
+    this.database.execute('DELETE FROM sessions WHERE id = @id', {
+      id: sessionId
+    });
+  }
 }

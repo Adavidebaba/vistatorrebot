@@ -44,4 +44,11 @@ export class MessageRepository {
        ORDER BY messages.created_at ASC`
     );
   }
+
+  deleteBySession(sessionId) {
+    this.database.execute(
+      'DELETE FROM messages WHERE session_id = @session_id',
+      { session_id: sessionId }
+    );
+  }
 }

@@ -9,6 +9,7 @@ export class SchemaMigrator {
     this.createEscalationsTable();
     this.createDocsCacheTable();
     this.createDocChunksTable();
+    this.createSettingsTable();
   }
 
   createSessionsTable() {
@@ -70,6 +71,17 @@ export class SchemaMigrator {
         content TEXT,
         embedding TEXT,
         created_at TEXT
+      )
+    `;
+    this.database.execute(sql);
+  }
+
+  createSettingsTable() {
+    const sql = `
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at TEXT
       )
     `;
     this.database.execute(sql);

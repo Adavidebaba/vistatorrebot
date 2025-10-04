@@ -137,6 +137,10 @@ export class AdminPageRenderer {
         <input type="url" id="documentation_url" name="documentation_url" value="${this.escapeHtml(viewModel.documentationUrl || '')}" placeholder="https://..." />
       </div>
       <div>
+        <label for="admin_email">Email amministratore</label>
+        <input type="email" id="admin_email" name="admin_email" value="${this.escapeHtml(viewModel.adminEmail || '')}" placeholder="gestore@example.com" />
+      </div>
+      <div>
         <label for="system_prompt">Prompt di sistema LLM</label>
         <textarea id="system_prompt" name="system_prompt" placeholder="Inserisci il prompt da utilizzare per il modello">${this.escapeHtml(viewModel.systemPrompt || '')}</textarea>
       </div>

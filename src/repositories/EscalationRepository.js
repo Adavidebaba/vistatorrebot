@@ -3,14 +3,15 @@ export class EscalationRepository {
     this.database = databaseManager;
   }
 
-  recordEscalation({ sessionId, type, reason }) {
+  recordEscalation({ sessionId, type, reason, details = '' }) {
     this.database.execute(
-      `INSERT INTO escalations (session_id, type, reason, email_sent_at)
-       VALUES (@session_id, @type, @reason, @email_sent_at)`,
+      `INSERT INTO escalations (session_id, type, reason, details, email_sent_at)
+       VALUES (@session_id, @type, @reason, @details, @email_sent_at)`,
       {
         session_id: sessionId,
         type,
         reason,
+        details,
         email_sent_at: new Date().toISOString()
       }
     );

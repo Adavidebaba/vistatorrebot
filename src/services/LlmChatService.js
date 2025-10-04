@@ -18,6 +18,7 @@ export class LlmChatService {
   }) {
     this.environmentConfig = environmentConfig;
     this.logger = Logger.for('LlmChatService');
+    this.debugLoggingEnabled = this.isDebugLogLevel();
     this.systemPromptProvider =
       systemPromptProvider ||
       new LlmSystemPromptProvider({ environmentConfig: this.environmentConfig });
@@ -49,6 +50,7 @@ export class LlmChatService {
       contextFragments,
       conversationMessages
     });
+    this.logDebugPayload('llm:composed_messages', inputMessages);
 
     const reasoningOptions = this.buildReasoningOptions();
     const maxOutputTokens = this.environmentConfig.llmMaxOutputTokens;
@@ -113,7 +115,11 @@ export class LlmChatService {
       payload.max_output_tokens = maxOutputTokens;
     }
 
+    this.logDebugPayload('openai:request_payload', payload);
     const response = await this.openAiClient.responses.create(payload);
+    const serializedResponse =
+      typeof response?.toJSON === 'function' ? response.toJSON() : response;
+    this.logDebugPayload('openai:response_payload', serializedResponse);
     this.logUsage(response.usage);
     this.logger.debug('OpenAI response received');
     return this.responseParser.parse(response);
@@ -127,7 +133,7 @@ export class LlmChatService {
     const body = {
       model,
       messages,
-      temperature: 0.2
+      temperature: 0
     };
     if (typeof maxOutputTokens === 'number') {
       body.max_tokens = maxOutputTokens;
@@ -145,6 +151,7 @@ export class LlmChatService {
       };
     }
 
+    this.logDebugPayload('xai:request_payload', body);
     const response = await fetch(`${this.environmentConfig.xaiBaseUrl.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -156,14 +163,17 @@ export class LlmChatService {
 
     if (!response.ok) {
       const errorText = await response.text();
-       this.logger.warn('xAI request failed', {
+      this.logger.warn('xAI request failed', {
         status: response.status,
         errorText
       });
       throw new Error(`xAI request failed: ${response.status} ${errorText}`);
     }
 
+    const rawResponse = await response.clone().text();
+    this.logDebugPayload('xai:raw_response', rawResponse);
     const payload = await response.json();
+    this.logDebugPayload('xai:response_payload', payload);
     this.logUsage(payload.usage);
     this.logger.debug('xAI response received');
 
@@ -172,21 +182,26 @@ export class LlmChatService {
       throw new Error('xAI response missing content');
     }
 
+    this.logDebugPayload('xai:raw_content', rawContent);
+
     try {
       const parsed = JSON.parse(rawContent);
+      this.logDebugPayload('xai:parsed_payload', parsed);
       this.logger.debug('xAI JSON parsed successfully');
       return this.responseParser.withDefaultFields(parsed);
     } catch (error) {
       this.logger.warn('xAI returned non-JSON payload, attempting fallback interpretation', {
         messageLength: typeof rawContent === 'string' ? rawContent.length : null
       });
-      return this.responseParser.withDefaultFields({
+      const fallbackPayload = {
         answer: rawContent,
         confidence: 0.5,
         needs_escalation: false,
         escalation_reason: 'none',
         snippets_used: []
-      });
+      };
+      this.logDebugPayload('xai:fallback_payload', fallbackPayload);
+      return this.responseParser.withDefaultFields(fallbackPayload);
     }
   }
 
@@ -235,5 +250,37 @@ export class LlmChatService {
       return false;
     }
     return true;
+  }
+
+  isDebugLogLevel() {
+    const level = (process.env.LOG_LEVEL || '').trim().toLowerCase();
+    return level === 'debug';
+  }
+
+  logDebugPayload(label, payload) {
+    if (!this.debugLoggingEnabled) {
+      return;
+    }
+    this.logger.debug(label, this.prepareDebugPayload(payload));
+  }
+
+  prepareDebugPayload(payload) {
+    if (payload === undefined) {
+      return undefined;
+    }
+    if (payload === null) {
+      return null;
+    }
+    if (typeof payload === 'string') {
+      return payload;
+    }
+    if (typeof payload === 'number' || typeof payload === 'boolean') {
+      return payload;
+    }
+    try {
+      return JSON.parse(JSON.stringify(payload));
+    } catch (error) {
+      return payload;
+    }
   }
 }

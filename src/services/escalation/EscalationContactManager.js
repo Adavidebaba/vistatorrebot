@@ -22,14 +22,42 @@ export class EscalationContactManager {
     return record?.status === 'ready' && typeof record.contact_info === 'string' && record.contact_info.trim().length > 0;
   }
 
-  markAwaitingConfirmation({ sessionId, reason }) {
-    this.contactRepository.markAwaitingConfirmation({ sessionId, reason });
-    this.logger.debug('Marked awaiting confirmation', { sessionId, reason });
+  markAwaitingConfirmation({
+    sessionId,
+    reason,
+    managerMessage = '',
+    requiresContact = false
+  }) {
+    this.contactRepository.markAwaitingConfirmation({
+      sessionId,
+      reason,
+      managerMessage,
+      requiresContact
+    });
+    this.logger.debug('Marked awaiting confirmation', {
+      sessionId,
+      reason,
+      requiresContact
+    });
   }
 
-  ensurePending({ sessionId, reason }) {
-    this.contactRepository.markPending({ sessionId, reason });
-    this.logger.debug('Marked escalation pending', { sessionId, reason });
+  ensurePending({
+    sessionId,
+    reason,
+    managerMessage = '',
+    requiresContact = false
+  }) {
+    this.contactRepository.markPending({
+      sessionId,
+      reason,
+      managerMessage,
+      requiresContact
+    });
+    this.logger.debug('Marked escalation pending', {
+      sessionId,
+      reason,
+      requiresContact
+    });
   }
 
   storeContact({ sessionId, contactInfo }) {
@@ -49,6 +77,22 @@ export class EscalationContactManager {
   getContactInfo(sessionId) {
     const record = this.contactRepository.getBySession(sessionId);
     return record?.contact_info || '';
+  }
+
+  getManagerMessage(sessionId) {
+    return this.contactRepository.getManagerMessage(sessionId);
+  }
+
+  requiresContact(sessionId) {
+    return this.contactRepository.requiresContact(sessionId);
+  }
+
+  storeManagerMessage({ sessionId, managerMessage }) {
+    this.contactRepository.storeManagerMessage({ sessionId, managerMessage });
+    this.logger.debug('Stored manager message', {
+      sessionId,
+      hasMessage: Boolean(managerMessage && managerMessage.trim())
+    });
   }
 
   clear(sessionId) {

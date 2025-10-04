@@ -1,9 +1,16 @@
 export class AdminDashboardPreferences {
-  constructor({ settingsRepository, environmentConfig, systemPromptProvider, promptSettingsResolver }) {
+  constructor({
+    settingsRepository,
+    environmentConfig,
+    systemPromptProvider,
+    promptSettingsResolver,
+    adminEmailSettingsManager
+  }) {
     this.settingsRepository = settingsRepository;
     this.environmentConfig = environmentConfig;
     this.systemPromptProvider = systemPromptProvider;
     this.promptSettingsResolver = promptSettingsResolver;
+    this.adminEmailSettingsManager = adminEmailSettingsManager;
   }
 
   getDocumentationUrl() {
@@ -40,6 +47,20 @@ export class AdminDashboardPreferences {
 
   updateSystemPrompt(prompt) {
     this.settingsRepository.saveSetting('system_prompt_override', this.normalizeMultiline(prompt));
+  }
+
+  getAdminEmail() {
+    if (!this.adminEmailSettingsManager) {
+      return '';
+    }
+    return this.adminEmailSettingsManager.getAdminEmail();
+  }
+
+  updateAdminEmail(email) {
+    if (!this.adminEmailSettingsManager) {
+      return { updated: false, reason: 'manager_missing' };
+    }
+    return this.adminEmailSettingsManager.updateAdminEmail(email);
   }
 
   normalizeString(value) {

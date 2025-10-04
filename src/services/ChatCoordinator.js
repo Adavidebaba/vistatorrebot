@@ -1,4 +1,7 @@
 import { Logger } from '../utils/Logger.js';
+import { LanguageResolver } from './chat/LanguageResolver.js';
+import { EscalationPromptManager } from './chat/EscalationPromptManager.js';
+import { InteractionClassifier } from './chat/InteractionClassifier.js';
 
 export class ChatCoordinator {
   constructor({
@@ -22,12 +25,18 @@ export class ChatCoordinator {
     this.escalationContactManager = escalationContactManager;
     this.escalationIntentDetector = escalationIntentDetector;
     this.logger = Logger.for('ChatCoordinator');
+    this.languageResolver = new LanguageResolver();
+    this.promptManager = new EscalationPromptManager({
+      localizationService: this.escalationLocalizationService,
+      languageResolver: this.languageResolver
+    });
+    this.interactionClassifier = new InteractionClassifier();
   }
 
   async handleMessage({ sessionId, userMessage }) {
     this.logger.debug('Handling message', { sessionId, hasText: Boolean(userMessage) });
     const session = this.sessionRepository.getOrCreateSession(sessionId);
-    const storedLanguage = this.normalizeLanguageCode(session.language);
+    const storedLanguage = this.languageResolver.normalize(session.language);
     this.sessionRepository.updateLastSeen(session.id, storedLanguage);
     this.logger.debug('Session updated with language', {
       sessionId: session.id,
@@ -82,113 +91,19 @@ export class ChatCoordinator {
       ? llmDecision.escalation_reason.trim().toLowerCase()
       : '';
 
-    return {
+  return {
       needsEscalation: true,
       reason: rawReason || 'missing_info'
     };
-  }
-
-  async buildEscalationPrompt({ llmDecision, languageCode }) {
-    if (!this.shouldDisplayPrompt(llmDecision)) {
-      return { shouldDisplay: false };
-    }
-
-    const normalizedLanguage = this.normalizeLanguageCode(languageCode);
-    const metadata = llmDecision?.metadata?.escalation_prompt || {};
-    const fallback = await this.resolvePromptFallback(normalizedLanguage);
-    const buttonLabels = this.selectLocalizedValue({
-      custom: metadata.button_labels,
-      fallback: fallback.buttonLabels,
-      languageCode: normalizedLanguage
-    });
-    const confirmationMessages = this.selectLocalizedValue({
-      custom: metadata.confirmation_messages,
-      fallback: fallback.confirmationMessages,
-      languageCode: normalizedLanguage
-    });
-
-    return {
-      shouldDisplay: true,
-      buttonLabels,
-      confirmationMessages
-    };
-  }
-
-  async resolvePromptFallback(languageCode) {
-    const defaultFallback = {
-      buttonLabels: { en: 'Notify the manager' },
-      confirmationMessages: { en: 'Yes, please notify the manager for me.' }
-    };
-    if (!this.escalationLocalizationService) {
-      return defaultFallback;
-    }
-    try {
-      const localized = await this.escalationLocalizationService.buildPromptFallback(
-        this.normalizeLanguageCode(languageCode)
-      );
-      return localized || defaultFallback;
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Prompt localization failed, using default strings', error);
-      return defaultFallback;
-    }
   }
 
   shouldUseIntentFallback(llmDecision) {
     if (!this.escalationIntentDetector) {
       return false;
     }
-    const hasEscalationFlag = typeof llmDecision?.needs_escalation === 'boolean';
-    const hasPromptFlag = this.shouldDisplayPrompt(llmDecision);
-    return !hasEscalationFlag && !hasPromptFlag;
-  }
-
-  async ensurePromptVisible({ languageCode, currentPrompt }) {
-    if (currentPrompt?.shouldDisplay) {
-      return currentPrompt;
-    }
-    const fallback = await this.resolvePromptFallback(languageCode);
-    return {
-      shouldDisplay: true,
-      buttonLabels: fallback.buttonLabels,
-      confirmationMessages: fallback.confirmationMessages
-    };
-  }
-
-  shouldDisplayPrompt(llmDecision) {
-    if (!llmDecision) {
-      return false;
-    }
-    if (llmDecision.show_escalation_prompt === true) {
-      return true;
-    }
-    const explicit = llmDecision?.metadata?.show_escalation_prompt;
-    return explicit === true;
-  }
-
-  selectLocalizedValue({ custom, fallback, languageCode }) {
-    const normalizedCustom = this.normalizeRecord(custom);
-    const source = Object.keys(normalizedCustom).length > 0 ? normalizedCustom : fallback;
-
-    if (languageCode && source[languageCode]) {
-      return { [languageCode]: source[languageCode] };
-    }
-
-    return source;
-  }
-
-  normalizeRecord(record) {
-    if (!record || typeof record !== 'object') {
-      return {};
-    }
-
-    return Object.entries(record).reduce((accumulator, [key, value]) => {
-      if (typeof value === 'string' && value.trim().length > 0) {
-        const normalizedKey = this.normalizeLanguageCode(key) || key;
-        accumulator[normalizedKey] = value.trim();
-      }
-      return accumulator;
-    }, {});
+    const hasInteractionType =
+      typeof llmDecision?.interaction_type === 'string' && llmDecision.interaction_type.trim().length > 0;
+    return !hasInteractionType;
   }
 
   normalizeLanguageCode(code) {
@@ -231,7 +146,7 @@ export class ChatCoordinator {
   }
 
   async handlePendingEscalationContact({ session, userMessage, detectedLanguage }) {
-    const normalizedLanguage = this.normalizeLanguageCode(detectedLanguage);
+    const normalizedLanguage = this.languageResolver.normalize(detectedLanguage);
     const trimmed = typeof userMessage === 'string' ? userMessage.trim() : '';
 
     if (!trimmed) {
@@ -273,6 +188,7 @@ export class ChatCoordinator {
 
     this.escalationContactManager.storeContact({ sessionId: session.id, contactInfo: trimmed });
     const reason = this.escalationContactManager.getReason(session.id);
+    const managerMessage = this.escalationContactManager.getManagerMessage(session.id);
     this.logger.info('Contact information captured', {
       sessionId: session.id,
       reason
@@ -281,7 +197,8 @@ export class ChatCoordinator {
     await this.processEscalation({
       sessionId: session.id,
       reason,
-      contactInfo: trimmed
+      contactInfo: trimmed,
+      managerMessage
     });
 
     const confirmation = await this.escalationContactManager.buildContactConfirmationMessage(
@@ -304,7 +221,7 @@ export class ChatCoordinator {
   }
 
   async handleEscalationConfirmation({ session, userMessage, detectedLanguage }) {
-    const normalizedLanguage = this.normalizeLanguageCode(detectedLanguage);
+    const normalizedLanguage = this.languageResolver.normalize(detectedLanguage);
     const confirmation = await this.escalationIntentDetector?.analyzeUserConfirmation({
       message: userMessage
     });
@@ -315,7 +232,14 @@ export class ChatCoordinator {
 
     if (confirmation === 'affirmative') {
       const reason = this.escalationContactManager.getReason(session.id) || 'missing_info';
-      this.escalationContactManager.ensurePending({ sessionId: session.id, reason });
+      const managerMessage = this.escalationContactManager.getManagerMessage(session.id);
+      const requiresContact = this.escalationContactManager.requiresContact(session.id);
+      this.escalationContactManager.ensurePending({
+        sessionId: session.id,
+        reason,
+        managerMessage,
+        requiresContact
+      });
       const contactRequest = await this.escalationContactManager.buildContactRequestMessage(
         normalizedLanguage
       );
@@ -372,7 +296,7 @@ export class ChatCoordinator {
     await this.documentManager.ensureDocumentLoaded();
     const contextFragments = await this.documentManager.getRelevantChunks(userMessage);
     const conversationMessages = this.getConversationMessages(session.id);
-    const baseLanguage = this.normalizeLanguageCode(fallbackLanguage);
+    const baseLanguage = this.languageResolver.normalize(fallbackLanguage);
 
     let llmResult;
     try {
@@ -381,8 +305,7 @@ export class ChatCoordinator {
         contextFragments
       });
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('LLM response generation failed', {
+      this.logger.error('LLM response generation failed', {
         sessionId: session.id,
         message: error?.message,
         status: error?.status ?? error?.code,
@@ -400,7 +323,7 @@ export class ChatCoordinator {
 
     const answer = llmResult.answer || 'Mi dispiace, si è verificato un problema nel generare la risposta.';
     const confidence = typeof llmResult.confidence === 'number' ? llmResult.confidence : null;
-    const languageFromLlm = this.normalizeLanguageCode(llmResult.language_code);
+    const languageFromLlm = this.languageResolver.normalize(llmResult.language_code);
     const normalizedLanguage = languageFromLlm || baseLanguage;
     this.logger.debug('Language resolved for session', {
       sessionId: session.id,
@@ -415,10 +338,29 @@ export class ChatCoordinator {
     });
     let needsEscalation = escalationDecision.needsEscalation;
     let escalationReason = escalationDecision.reason;
-    let escalationPromptState = await this.buildEscalationPrompt({
+    let escalationPromptState = await this.promptManager.buildPrompt({
       llmDecision: llmResult,
       languageCode: normalizedLanguage
     });
+    let interactionType = this.interactionClassifier.normalizeInteractionType(
+      llmResult.interaction_type
+    );
+    let shouldCollectContact = this.interactionClassifier.normalizeBooleanFlag(
+      llmResult.should_collect_contact
+    );
+    const managerMessage = this.interactionClassifier.normalizeManagerMessage(
+      llmResult.manager_message
+    );
+
+    if (interactionType === 'non_urgent_report') {
+      needsEscalation = true;
+      escalationReason = 'non_urgent';
+    } else if (interactionType === 'urgent_emergency') {
+      needsEscalation = true;
+      escalationReason = 'urgent';
+      shouldCollectContact = true;
+    }
+
     let finalAnswer = answer;
 
     let intentAnalysis = null;
@@ -437,6 +379,8 @@ export class ChatCoordinator {
       if (!escalationReason || escalationReason === 'none') {
         escalationReason = intentAnalysis.reasonHint || 'urgent';
       }
+      interactionType = 'urgent_emergency';
+      shouldCollectContact = true;
     }
 
     if (needsEscalation && (!escalationReason || escalationReason === 'none') && intentAnalysis?.reasonHint) {
@@ -447,45 +391,56 @@ export class ChatCoordinator {
       const reason = escalationReason && escalationReason !== 'none'
         ? escalationReason
         : intentAnalysis.reasonHint || 'missing_info';
+      const requiresContact = shouldCollectContact || reason === 'urgent';
       this.escalationContactManager?.markAwaitingConfirmation({
         sessionId: session.id,
-        reason
+        reason,
+        managerMessage,
+        requiresContact
       });
-      escalationPromptState = await this.ensurePromptVisible({
+      escalationPromptState = await this.promptManager.ensurePromptVisible({
         languageCode: normalizedLanguage,
         currentPrompt: escalationPromptState
       });
     }
-
     if (needsEscalation && escalationReason !== 'none') {
-      if (this.escalationContactManager?.hasContact(session.id)) {
-        await this.processEscalation({
+      const requiresContact =
+        shouldCollectContact || this.escalationContactManager?.requiresContact(session.id);
+      const contactManager = this.escalationContactManager;
+
+      if (contactManager && managerMessage) {
+        contactManager.storeManagerMessage({ sessionId: session.id, managerMessage });
+      }
+
+      if (contactManager && requiresContact && !contactManager.hasContact(session.id)) {
+        contactManager.ensurePending({
           sessionId: session.id,
           reason: escalationReason,
-          contactInfo: this.escalationContactManager.getContactInfo(session.id)
-        });
-        this.escalationContactManager.clear(session.id);
-      } else {
-        this.escalationContactManager?.ensurePending({
-          sessionId: session.id,
-          reason: escalationReason
+          managerMessage,
+          requiresContact: true
         });
         this.logger.info('Escalation pending contact info', {
           sessionId: session.id,
           reason: escalationReason
         });
-        const contactRequest = this.escalationContactManager
-          ? await this.escalationContactManager.buildContactRequestMessage(normalizedLanguage)
+        const contactRequest = contactManager
+          ? await contactManager.buildContactRequestMessage(normalizedLanguage)
           : null;
         if (contactRequest) {
           finalAnswer = this.mergeAnswerWithContactRequest({ answer: finalAnswer, contactRequest });
         }
         needsEscalation = false;
         escalationReason = 'none';
-        escalationPromptState = await this.ensurePromptVisible({
-          languageCode: normalizedLanguage,
-          currentPrompt: escalationPromptState
+        escalationPromptState = { shouldDisplay: false };
+      } else {
+        const contactInfo = contactManager?.getContactInfo(session.id) || '';
+        await this.processEscalation({
+          sessionId: session.id,
+          reason: escalationReason,
+          contactInfo,
+          managerMessage: managerMessage || contactManager?.getManagerMessage(session.id) || ''
         });
+        contactManager?.clear(session.id);
       }
     }
 
@@ -498,19 +453,6 @@ export class ChatCoordinator {
 
     this.sessionRepository.updateLastSeen(session.id, normalizedLanguage);
 
-    if (needsEscalation && escalationReason !== 'none') {
-      await this.processEscalation({
-        sessionId: session.id,
-        reason: escalationReason,
-        contactInfo: this.escalationContactManager?.getContactInfo(session.id) || ''
-      });
-      this.escalationContactManager?.clear(session.id);
-      this.logger.info('Escalation processed after fallback', {
-        sessionId: session.id,
-        reason: escalationReason
-      });
-    }
-
     return {
       answer: finalAnswer,
       escalated: needsEscalation,
@@ -519,17 +461,18 @@ export class ChatCoordinator {
     };
   }
 
-  async processEscalation({ sessionId, reason, contactInfo }) {
+  async processEscalation({ sessionId, reason, contactInfo, managerMessage = '' }) {
     this.sessionRepository.markEscalated(sessionId);
     await this.handleEscalation({
       sessionId,
-      type: reason,
+      type: this.interactionClassifier.mapReasonToCategory(reason),
       reason,
-      contactInfo
+      contactInfo,
+      managerMessage
     });
   }
 
-  async handleEscalation({ sessionId, type, reason, contactInfo }) {
+  async handleEscalation({ sessionId, type, reason, contactInfo, managerMessage }) {
     const recentMessages = this.messageRepository.getRecentMessages(sessionId, 6).reverse();
     try {
       await this.emailNotificationService.sendEscalationEmail({
@@ -537,13 +480,18 @@ export class ChatCoordinator {
         type,
         reason,
         messages: recentMessages,
-        contactInfo: contactInfo || this.escalationContactManager?.getContactInfo(sessionId) || ''
+        contactInfo: contactInfo || this.escalationContactManager?.getContactInfo(sessionId) || '',
+        managerMessage
       });
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Errore invio email escalation', error);
+      this.logger.error('Errore invio email escalation', error);
     }
-    this.escalationRepository.recordEscalation({ sessionId, type, reason });
+    this.escalationRepository.recordEscalation({
+      sessionId,
+      type,
+      reason,
+      details: managerMessage
+    });
   }
 
 }

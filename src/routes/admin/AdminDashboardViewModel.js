@@ -5,7 +5,8 @@ export class AdminDashboardViewModel {
     feedbackMessage = null,
     modelOptions = [],
     documentationUrl = '',
-    systemPrompt = ''
+    systemPrompt = '',
+    adminEmail = ''
   }) {
     this.sessions = sessions;
     this.selectedDays = selectedDays;
@@ -13,6 +14,7 @@ export class AdminDashboardViewModel {
     this.modelOptions = modelOptions;
     this.documentationUrl = documentationUrl;
     this.systemPrompt = systemPrompt;
+    this.adminEmail = adminEmail;
   }
 
   get hasSessions() {

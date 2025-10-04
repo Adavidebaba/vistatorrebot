@@ -31,6 +31,9 @@ export class LlmResponseParser {
     const languageCode = this.normalizeLanguageCode(
       payload.language_code || payload.message_language || payload.language
     );
+    const interactionType = this.normalizeInteractionType(payload.interaction_type);
+    const shouldCollectContact = this.normalizeBoolean(payload.should_collect_contact);
+    const managerMessage = this.normalizeManagerMessage(payload.manager_message);
 
     return {
       answer: payload.answer ?? '',
@@ -43,7 +46,10 @@ export class LlmResponseParser {
       snippets_used: snippets,
       show_escalation_prompt: showEscalationPrompt,
       metadata,
-      language_code: languageCode
+      language_code: languageCode,
+      interaction_type: interactionType,
+      should_collect_contact: shouldCollectContact,
+      manager_message: managerMessage
     };
   }
 
@@ -65,7 +71,7 @@ export class LlmResponseParser {
   }
 
   normalizeEscalationReason({ rawReason, needsEscalation }) {
-    const allowedReasons = new Set(['missing_info', 'urgent', 'none']);
+    const allowedReasons = new Set(['missing_info', 'non_urgent', 'urgent', 'none']);
     if (typeof rawReason === 'string') {
       const normalized = rawReason.trim().toLowerCase();
       if (allowedReasons.has(normalized)) {
@@ -98,6 +104,25 @@ export class LlmResponseParser {
       return metadata;
     }
     return {};
+  }
+
+  normalizeInteractionType(type) {
+    if (typeof type !== 'string') {
+      return 'info_support';
+    }
+    const normalized = type.trim().toLowerCase();
+    const allowed = new Set(['info_support', 'non_urgent_report', 'urgent_emergency']);
+    if (allowed.has(normalized)) {
+      return normalized;
+    }
+    return 'info_support';
+  }
+
+  normalizeManagerMessage(message) {
+    if (typeof message !== 'string') {
+      return '';
+    }
+    return message.trim();
   }
 
   normalizeLanguageCode(code) {

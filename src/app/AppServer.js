@@ -17,6 +17,7 @@ import { ChatHistoryService } from '../services/ChatHistoryService.js';
 import { ConversationDeletionService } from '../services/ConversationDeletionService.js';
 import { LlmModelProvider } from '../services/llm/LlmModelProvider.js';
 import { AdminDashboardPreferences } from '../services/admin/AdminDashboardPreferences.js';
+import { AdminEmailSettingsManager } from '../services/admin/AdminEmailSettingsManager.js';
 import { LlmSystemPromptProvider } from '../services/llm/LlmSystemPromptProvider.js';
 import { LlmPromptSettingsResolver } from '../services/llm/LlmPromptSettingsResolver.js';
 import { LlmTranslationService } from '../services/llm/LlmTranslationService.js';
@@ -27,6 +28,7 @@ import { SessionMiddleware } from '../middleware/SessionMiddleware.js';
 import { AdminAuthMiddleware } from '../middleware/AdminAuthMiddleware.js';
 import { PublicRouter } from '../routes/PublicRouter.js';
 import { AdminRouter } from '../routes/admin/AdminRouter.js';
+import { LogAlertManager } from '../services/logs/LogAlertManager.js';
 
 export class AppServer {
   constructor({ environmentConfig, databaseManager }) {
@@ -39,6 +41,10 @@ export class AppServer {
     this.escalationContactRepository = new EscalationContactRepository(databaseManager);
     this.docsCacheRepository = new DocsCacheRepository(databaseManager);
     this.settingsRepository = new SettingsRepository(databaseManager);
+    this.adminEmailSettingsManager = new AdminEmailSettingsManager({
+      settingsRepository: this.settingsRepository,
+      environmentConfig: this.environmentConfig
+    });
     this.promptSettingsResolver = new LlmPromptSettingsResolver({
       settingsRepository: this.settingsRepository
     });
@@ -59,7 +65,13 @@ export class AppServer {
       modelProvider: this.llmModelProvider,
       systemPromptProvider: this.llmSystemPromptProvider
     });
-    this.emailNotificationService = new EmailNotificationService({ environmentConfig });
+    this.emailNotificationService = new EmailNotificationService({
+      environmentConfig,
+      adminEmailSettingsManager: this.adminEmailSettingsManager
+    });
+    this.logAlertManager = new LogAlertManager({
+      emailNotificationService: this.emailNotificationService
+    });
     this.chatHistoryService = new ChatHistoryService({
       messageRepository: this.messageRepository
     });
@@ -87,7 +99,8 @@ export class AppServer {
       settingsRepository: this.settingsRepository,
       environmentConfig: this.environmentConfig,
       systemPromptProvider: this.llmSystemPromptProvider,
-      promptSettingsResolver: this.promptSettingsResolver
+      promptSettingsResolver: this.promptSettingsResolver,
+      adminEmailSettingsManager: this.adminEmailSettingsManager
     });
     this.chatCoordinator = new ChatCoordinator({
       sessionRepository: this.sessionRepository,
@@ -120,6 +133,7 @@ export class AppServer {
 
     this.app = express();
     this.configureApp();
+    this.logAlertManager.start();
   }
 
   configureApp() {

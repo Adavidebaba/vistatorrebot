@@ -16,8 +16,14 @@ export class LlmResponseSchemaProvider {
           needs_escalation: { type: 'boolean' },
           escalation_reason: {
             type: 'string',
-            enum: ['missing_info', 'urgent', 'none']
+            enum: ['missing_info', 'non_urgent', 'urgent', 'none']
           },
+          interaction_type: {
+            type: 'string',
+            enum: ['info_support', 'non_urgent_report', 'urgent_emergency']
+          },
+          should_collect_contact: { type: 'boolean' },
+          manager_message: { type: 'string' },
           language_code: {
             type: 'string',
             pattern: '^[a-z]{2}(-[a-z]{2})?$'
@@ -32,6 +38,9 @@ export class LlmResponseSchemaProvider {
           'confidence',
           'needs_escalation',
           'escalation_reason',
+          'interaction_type',
+          'should_collect_contact',
+          'manager_message',
           'language_code',
           'snippets_used'
         ],

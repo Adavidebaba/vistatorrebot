@@ -45,12 +45,14 @@ export class SchemaMigrator {
       CREATE TABLE IF NOT EXISTS escalations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         session_id TEXT,
-        type TEXT CHECK(type IN ('missing_info','urgent')),
+        type TEXT CHECK(type IN ('missing_info','non_urgent','urgent')),
         reason TEXT,
+        details TEXT,
         email_sent_at TEXT
       )
     `;
     this.database.execute(sql);
+    this.ensureEscalationsDetailsColumn();
   }
 
   createEscalationContactsTable() {
@@ -60,11 +62,49 @@ export class SchemaMigrator {
         status TEXT CHECK(status IN ('awaiting_confirmation','pending','ready')),
         reason TEXT,
         contact_info TEXT,
+        manager_message TEXT,
+        requires_contact INTEGER DEFAULT 0,
         created_at TEXT,
         updated_at TEXT
       )
     `;
     this.database.execute(sql);
+    this.ensureEscalationContactColumns();
+  }
+
+  ensureEscalationContactColumns() {
+    try {
+      this.database.execute('ALTER TABLE escalation_contacts ADD COLUMN manager_message TEXT');
+    } catch (error) {
+      if (!this.isDuplicateColumnError(error)) {
+        throw error;
+      }
+    }
+
+    try {
+      this.database.execute(
+        'ALTER TABLE escalation_contacts ADD COLUMN requires_contact INTEGER DEFAULT 0'
+      );
+    } catch (error) {
+      if (!this.isDuplicateColumnError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  ensureEscalationsDetailsColumn() {
+    try {
+      this.database.execute('ALTER TABLE escalations ADD COLUMN details TEXT');
+    } catch (error) {
+      if (!this.isDuplicateColumnError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  isDuplicateColumnError(error) {
+    const message = error?.message?.toLowerCase?.() || '';
+    return message.includes('duplicate column name');
   }
 
   createDocsCacheTable() {

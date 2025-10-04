@@ -1,3 +1,5 @@
+import { logNotifier } from './LogNotifier.js';
+
 const LEVELS = ['debug', 'info', 'warn', 'error'];
 
 const resolveLevel = () => {
@@ -13,6 +15,36 @@ const formatArgs = (scope, args) => [
   `[${levelToTag(scope.level)}] [${scope.module}]`,
   ...args
 ];
+
+const notifyListeners = ({ module, level, args }) => {
+  if (!['warn', 'error'].includes(level)) {
+    return;
+  }
+  const timestamp = new Date().toISOString();
+  logNotifier.notify({
+    module,
+    level,
+    timestamp,
+    messages: args.map(stringifyArg)
+  });
+};
+
+const stringifyArg = (value) => {
+  if (value instanceof Error) {
+    return value.stack || value.message || 'Error senza dettagli';
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    return '[object]';
+  }
+};
 
 const levelToTag = (level) => {
   switch (level) {
@@ -41,11 +73,13 @@ const buildLogger = (module) => ({
     }
   },
   warn: (...args) => {
+    notifyListeners({ module, level: 'warn', args });
     if (shouldLog('warn')) {
       console.warn(...formatArgs({ module, level: 'warn' }, args));
     }
   },
   error: (...args) => {
+    notifyListeners({ module, level: 'error', args });
     if (shouldLog('error')) {
       console.error(...formatArgs({ module, level: 'error' }, args));
     }

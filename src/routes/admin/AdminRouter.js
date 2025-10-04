@@ -66,13 +66,15 @@ export class AdminRouter {
       const modelOptions = this.buildModelOptions();
       const documentationUrl = this.dashboardPreferences?.getDocumentationUrl() || '';
       const systemPrompt = this.dashboardPreferences?.getSystemPrompt() || '';
+      const adminEmail = this.dashboardPreferences?.getAdminEmail() || '';
       const viewModel = new AdminDashboardViewModel({
         sessions,
         selectedDays,
         feedbackMessage,
         modelOptions,
         documentationUrl,
-        systemPrompt
+        systemPrompt,
+        adminEmail
       });
       res.send(this.pageRenderer.renderDashboard(viewModel));
     });
@@ -134,9 +136,14 @@ export class AdminRouter {
       (req, res) => {
         const documentationUrl = req.body.documentation_url || '';
         const systemPrompt = req.body.system_prompt || '';
+        const adminEmail = req.body.admin_email || '';
         if (this.dashboardPreferences) {
           this.dashboardPreferences.updateDocumentationUrl(documentationUrl);
           this.dashboardPreferences.updateSystemPrompt(systemPrompt);
+          const emailResult = this.dashboardPreferences.updateAdminEmail(adminEmail);
+          if (!emailResult.updated) {
+            return res.redirect('/admin?preferences=invalid_email');
+          }
         }
         res.redirect('/admin?preferences=updated');
       }
@@ -167,6 +174,9 @@ export class AdminRouter {
     }
     if (query?.preferences === 'updated') {
       return 'Preferenze aggiornate con successo';
+    }
+    if (query?.preferences === 'invalid_email') {
+      return 'Email amministratore non valida. Controlla il valore inserito.';
     }
     return null;
   }

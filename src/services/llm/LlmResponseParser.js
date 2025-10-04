@@ -28,6 +28,9 @@ export class LlmResponseParser {
     const snippets = this.normalizeSnippets(payload.snippets_used);
     const showEscalationPrompt = this.normalizeBoolean(payload.show_escalation_prompt);
     const metadata = this.normalizeMetadata(payload.metadata);
+    const languageCode = this.normalizeLanguageCode(
+      payload.language_code || payload.message_language || payload.language
+    );
 
     return {
       answer: payload.answer ?? '',
@@ -39,7 +42,8 @@ export class LlmResponseParser {
       }),
       snippets_used: snippets,
       show_escalation_prompt: showEscalationPrompt,
-      metadata
+      metadata,
+      language_code: languageCode
     };
   }
 
@@ -94,5 +98,39 @@ export class LlmResponseParser {
       return metadata;
     }
     return {};
+  }
+
+  normalizeLanguageCode(code) {
+    if (typeof code !== 'string') {
+      return '';
+    }
+    const normalized = code.trim().toLowerCase();
+    if (!normalized) {
+      return '';
+    }
+
+    const iso3ToIso2 = {
+      ita: 'it',
+      eng: 'en',
+      spa: 'es',
+      fra: 'fr',
+      fre: 'fr',
+      deu: 'de',
+      ger: 'de',
+      por: 'pt',
+      sun: 'su',
+      nya: 'ny'
+    };
+
+    if (normalized.length === 3 && iso3ToIso2[normalized]) {
+      return iso3ToIso2[normalized];
+    }
+
+    if (normalized.includes('-')) {
+      const [primary] = normalized.split('-');
+      return primary || normalized;
+    }
+
+    return normalized.slice(0, 2);
   }
 }

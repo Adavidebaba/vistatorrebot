@@ -4,6 +4,7 @@ import { LlmPromptComposer } from './llm/LlmPromptComposer.js';
 import { LlmResponseParser } from './llm/LlmResponseParser.js';
 import { LlmResponseSchemaProvider } from './llm/LlmResponseSchemaProvider.js';
 import { LlmSystemPromptProvider } from './llm/LlmSystemPromptProvider.js';
+import { Logger } from '../utils/Logger.js';
 
 export class LlmChatService {
   constructor({
@@ -16,12 +17,17 @@ export class LlmChatService {
     modelProvider
   }) {
     this.environmentConfig = environmentConfig;
+    this.logger = Logger.for('LlmChatService');
     this.systemPromptProvider =
       systemPromptProvider ||
       new LlmSystemPromptProvider({ environmentConfig: this.environmentConfig });
     const systemPrompt = this.systemPromptProvider.getPrompt();
     this.promptComposer =
-      promptComposer || new LlmPromptComposer({ systemPrompt });
+      promptComposer ||
+      new LlmPromptComposer({
+        systemPrompt,
+        systemPromptProvider: this.systemPromptProvider
+      });
     this.responseParser = responseParser || new LlmResponseParser();
     this.responseSchemaProvider =
       responseSchemaProvider || new LlmResponseSchemaProvider();
@@ -35,6 +41,10 @@ export class LlmChatService {
   }
 
   async generateResponse({ conversationMessages = [], contextFragments = [] }) {
+    this.logger.debug('Preparing LLM request', {
+      contextFragments: contextFragments.length,
+      conversationMessages: conversationMessages.length
+    });
     const inputMessages = this.promptComposer.composeMessages({
       contextFragments,
       conversationMessages
@@ -52,6 +62,7 @@ export class LlmChatService {
 
     for (const candidate of candidates) {
       try {
+        this.logger.debug('Attempting model candidate', candidate);
         if (candidate.provider === 'xai') {
           return await this.generateWithXai({
             model: candidate.model,
@@ -68,9 +79,10 @@ export class LlmChatService {
         });
       } catch (error) {
         lastError = error;
-        // eslint-disable-next-line no-console
-        console.warn(
-          `Model ${candidate.provider}:${candidate.model} failed: ${error?.message || 'unknown error'}`
+        this.logger.warn(
+          'Model candidate failed',
+          candidate,
+          error?.message || 'unknown error'
         );
       }
     }
@@ -103,6 +115,7 @@ export class LlmChatService {
 
     const response = await this.openAiClient.responses.create(payload);
     this.logUsage(response.usage);
+    this.logger.debug('OpenAI response received');
     return this.responseParser.parse(response);
   }
 
@@ -120,6 +133,18 @@ export class LlmChatService {
       body.max_tokens = maxOutputTokens;
     }
 
+    const schemaFormat = this.responseSchemaProvider.buildJsonSchemaFormat();
+    if (schemaFormat && schemaFormat.type === 'json_schema') {
+      body.response_format = {
+        type: 'json_schema',
+        json_schema: {
+          name: schemaFormat.name,
+          schema: schemaFormat.schema,
+          strict: schemaFormat.strict !== false
+        }
+      };
+    }
+
     const response = await fetch(`${this.environmentConfig.xaiBaseUrl.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -131,11 +156,16 @@ export class LlmChatService {
 
     if (!response.ok) {
       const errorText = await response.text();
+       this.logger.warn('xAI request failed', {
+        status: response.status,
+        errorText
+      });
       throw new Error(`xAI request failed: ${response.status} ${errorText}`);
     }
 
     const payload = await response.json();
     this.logUsage(payload.usage);
+    this.logger.debug('xAI response received');
 
     const rawContent = payload?.choices?.[0]?.message?.content;
     if (!rawContent) {
@@ -144,10 +174,12 @@ export class LlmChatService {
 
     try {
       const parsed = JSON.parse(rawContent);
+      this.logger.debug('xAI JSON parsed successfully');
       return this.responseParser.withDefaultFields(parsed);
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.warn('xAI returned non-JSON payload, using raw text as answer');
+      this.logger.warn('xAI returned non-JSON payload, attempting fallback interpretation', {
+        messageLength: typeof rawContent === 'string' ? rawContent.length : null
+      });
       return this.responseParser.withDefaultFields({
         answer: rawContent,
         confidence: 0.5,
@@ -162,10 +194,7 @@ export class LlmChatService {
     const promptTokens = usage.input_tokens ?? usage.prompt_tokens ?? 0;
     const completionTokens = usage.output_tokens ?? usage.completion_tokens ?? 0;
     const totalTokens = usage.total_tokens ?? promptTokens + completionTokens;
-    // eslint-disable-next-line no-console
-    console.log(
-      `LLM usage → prompt: ${promptTokens} tokens, completion: ${completionTokens} tokens, total: ${totalTokens} tokens`
-    );
+    this.logger.info('Usage', { promptTokens, completionTokens, totalTokens });
   }
 
   buildReasoningOptions() {

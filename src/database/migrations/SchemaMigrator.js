@@ -57,7 +57,7 @@ export class SchemaMigrator {
     const sql = `
       CREATE TABLE IF NOT EXISTS escalation_contacts (
         session_id TEXT PRIMARY KEY,
-        status TEXT CHECK(status IN ('pending','ready')),
+        status TEXT CHECK(status IN ('awaiting_confirmation','pending','ready')),
         reason TEXT,
         contact_info TEXT,
         created_at TEXT,

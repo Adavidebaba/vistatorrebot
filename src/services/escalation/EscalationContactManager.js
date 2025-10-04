@@ -1,7 +1,10 @@
+import { Logger } from '../../utils/Logger.js';
+
 export class EscalationContactManager {
   constructor({ contactRepository, localizationService }) {
     this.contactRepository = contactRepository;
     this.localizationService = localizationService;
+    this.logger = Logger.for('EscalationContactManager');
   }
 
   isAwaitingContact(sessionId) {
@@ -9,13 +12,24 @@ export class EscalationContactManager {
     return record?.status === 'pending';
   }
 
+  isAwaitingConfirmation(sessionId) {
+    const record = this.contactRepository.getBySession(sessionId);
+    return record?.status === 'awaiting_confirmation';
+  }
+
   hasContact(sessionId) {
     const record = this.contactRepository.getBySession(sessionId);
     return record?.status === 'ready' && typeof record.contact_info === 'string' && record.contact_info.trim().length > 0;
   }
 
+  markAwaitingConfirmation({ sessionId, reason }) {
+    this.contactRepository.markAwaitingConfirmation({ sessionId, reason });
+    this.logger.debug('Marked awaiting confirmation', { sessionId, reason });
+  }
+
   ensurePending({ sessionId, reason }) {
-    this.contactRepository.upsertPending({ sessionId, reason });
+    this.contactRepository.markPending({ sessionId, reason });
+    this.logger.debug('Marked escalation pending', { sessionId, reason });
   }
 
   storeContact({ sessionId, contactInfo }) {
@@ -24,6 +38,7 @@ export class EscalationContactManager {
       return;
     }
     this.contactRepository.storeContact({ sessionId, contactInfo: sanitized });
+    this.logger.debug('Stored contact info', { sessionId, length: sanitized.length });
   }
 
   getReason(sessionId) {
@@ -38,6 +53,7 @@ export class EscalationContactManager {
 
   clear(sessionId) {
     this.contactRepository.delete(sessionId);
+    this.logger.debug('Cleared escalation contact row', { sessionId });
   }
 
   async buildContactRequestMessage(languageCode) {

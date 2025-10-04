@@ -18,6 +18,10 @@ export class LlmResponseSchemaProvider {
             type: 'string',
             enum: ['missing_info', 'urgent', 'none']
           },
+          language_code: {
+            type: 'string',
+            pattern: '^[a-z]{2}(-[a-z]{2})?$'
+          },
           snippets_used: {
             type: 'array',
             items: { type: 'string' }
@@ -28,6 +32,7 @@ export class LlmResponseSchemaProvider {
           'confidence',
           'needs_escalation',
           'escalation_reason',
+          'language_code',
           'snippets_used'
         ],
         additionalProperties: false

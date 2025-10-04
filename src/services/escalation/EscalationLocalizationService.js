@@ -1,11 +1,22 @@
+import { Logger } from '../../utils/Logger.js';
+
 export class EscalationLocalizationService {
   constructor({ translationService }) {
     this.translationService = translationService;
     this.cache = new Map();
+    this.logger = Logger.for('EscalationLocalization');
   }
 
   async buildPromptFallback(languageCode) {
     const normalized = this.normalizeLanguageCode(languageCode) || 'en';
+    if (normalized === 'en') {
+      this.logger.debug('Using default English prompt fallback');
+      return {
+        buttonLabels: { en: 'Notify the manager' },
+        confirmationMessages: { en: 'Yes, please notify the manager for me.' }
+      };
+    }
+
     const buttonLabel = await this.getLocalizedString({
       key: 'prompt_button',
       baseText: 'Notify the manager',
@@ -39,6 +50,14 @@ export class EscalationLocalizationService {
     });
   }
 
+  async buildContactDeclinedMessage(languageCode) {
+    return this.getLocalizedString({
+      key: 'contact_declined',
+      baseText: 'Understood, I will stay available if you need anything else.',
+      languageCode: this.normalizeLanguageCode(languageCode)
+    });
+  }
+
   async getLocalizedString({ key, baseText, languageCode }) {
     const normalizedLanguage = languageCode || 'en';
     if (normalizedLanguage === 'en' || !this.translationService) {
@@ -47,12 +66,17 @@ export class EscalationLocalizationService {
 
     const cacheKey = `${key}:${normalizedLanguage}`;
     if (this.cache.has(cacheKey)) {
+      this.logger.debug('Localization cache hit', { cacheKey });
       return this.cache.get(cacheKey);
     }
 
     const translation = await this.translationService.translate({
       text: baseText,
       targetLanguage: normalizedLanguage
+    });
+    this.logger.debug('Localized string generated', {
+      cacheKey,
+      length: translation ? translation.length : null
     });
     this.cache.set(cacheKey, translation);
     return translation;

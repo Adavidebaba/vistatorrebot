@@ -16,13 +16,13 @@ import { ChatCoordinator } from '../services/ChatCoordinator.js';
 import { ChatHistoryService } from '../services/ChatHistoryService.js';
 import { ConversationDeletionService } from '../services/ConversationDeletionService.js';
 import { LlmModelProvider } from '../services/llm/LlmModelProvider.js';
-import { LanguageDetectionService } from '../services/language/LanguageDetectionService.js';
 import { AdminDashboardPreferences } from '../services/admin/AdminDashboardPreferences.js';
 import { LlmSystemPromptProvider } from '../services/llm/LlmSystemPromptProvider.js';
 import { LlmPromptSettingsResolver } from '../services/llm/LlmPromptSettingsResolver.js';
 import { LlmTranslationService } from '../services/llm/LlmTranslationService.js';
 import { EscalationLocalizationService } from '../services/escalation/EscalationLocalizationService.js';
 import { EscalationContactManager } from '../services/escalation/EscalationContactManager.js';
+import { EscalationIntentDetector } from '../services/escalation/EscalationIntentDetector.js';
 import { SessionMiddleware } from '../middleware/SessionMiddleware.js';
 import { AdminAuthMiddleware } from '../middleware/AdminAuthMiddleware.js';
 import { PublicRouter } from '../routes/PublicRouter.js';
@@ -69,14 +69,19 @@ export class AppServer {
       escalationRepository: this.escalationRepository,
       escalationContactRepository: this.escalationContactRepository
     });
-    this.languageDetectionService = new LanguageDetectionService();
-    this.llmTranslationService = new LlmTranslationService({ environmentConfig });
+    this.llmTranslationService = new LlmTranslationService({
+      environmentConfig,
+      modelProvider: this.llmModelProvider
+    });
     this.escalationLocalizationService = new EscalationLocalizationService({
       translationService: this.llmTranslationService
     });
     this.escalationContactManager = new EscalationContactManager({
       contactRepository: this.escalationContactRepository,
       localizationService: this.escalationLocalizationService
+    });
+    this.escalationIntentDetector = new EscalationIntentDetector({
+      translationService: this.llmTranslationService
     });
     this.adminDashboardPreferences = new AdminDashboardPreferences({
       settingsRepository: this.settingsRepository,
@@ -93,7 +98,7 @@ export class AppServer {
       emailNotificationService: this.emailNotificationService,
       escalationLocalizationService: this.escalationLocalizationService,
       escalationContactManager: this.escalationContactManager,
-      languageDetectionService: this.languageDetectionService
+      escalationIntentDetector: this.escalationIntentDetector
     });
 
     this.sessionMiddleware = new SessionMiddleware({ sessionRepository: this.sessionRepository });

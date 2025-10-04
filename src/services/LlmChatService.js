@@ -189,20 +189,22 @@ export class LlmChatService {
       this.logDebugPayload('xai:parsed_payload', parsed);
       this.logger.debug('xAI JSON parsed successfully');
       return this.responseParser.withDefaultFields(parsed);
-    } catch (error) {
-      this.logger.warn('xAI returned non-JSON payload, attempting fallback interpretation', {
-        messageLength: typeof rawContent === 'string' ? rawContent.length : null
-      });
+    } catch (error) 
+    {
+      // this.logger.warn('xAI returned non-JSON payload, attempting fallback interpretation', {
+      //   messageLength: typeof rawContent === 'string' ? rawContent.length : null
+      // });
       const fallbackPayload = {
         answer: rawContent,
         confidence: 0.5,
         needs_escalation: false,
         escalation_reason: 'none',
         snippets_used: []
-      };
+      };  
       this.logDebugPayload('xai:fallback_payload', fallbackPayload);
       return this.responseParser.withDefaultFields(fallbackPayload);
     }
+    return this.responseParser.withDefaultFields(rawContent);
   }
 
   logUsage(usage = {}) {
